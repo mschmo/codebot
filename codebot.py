@@ -23,26 +23,43 @@ def stdout_io():
     sys.stdout = old
 
 
+def timeout(seconds):
+    def timeout_decorator(func):
+        def wrapper(*args):
+            signal.signal(signal.SIGALRM, signal_handler)
+            signal.alarm(seconds)
+            try:
+                output = func(*args)
+            except Exception as e:
+                signal.alarm(0)
+                raise e
+            signal.alarm(0)
+            return output
+        return wrapper
+    return timeout_decorator
+
+
 def signal_handler(signum, frame):
-    raise Exception('End of Time')
+    raise Exception('')
+
+
+@timeout(5)
+def execute_code(code):
+    with stdout_io() as s:
+        exec code  # in restricted_globals
+        return s.getvalue()
 
 
 def handle_request(action):
     if action.get('type') != 'message' or action.get('user') == 'U0ZCL04R5' or action.get('hidden'):
         return
-    print(action)
-    with stdout_io() as s:
-        try:
-            code = compile(action['text'], '<string>', 'exec')
-            signal.signal(signal.SIGALRM, signal_handler)
-            signal.alarm(5)
-            exec code  # in restricted_globals
-            signal.alarm(0)
-            output = s.getvalue()
-        except:
-            output = sys.exc_info()
-            sc.rtm_send_message(CHANNEL, "```{}\n{}```".format(output[0], output[1]))
-            return
+    try:
+        code = compile(action['text'], '<string>', 'exec')
+        output = execute_code(code)
+    except:
+        exception_info = sys.exc_info()
+        sc.rtm_send_message(CHANNEL, "```{}\n{}```".format(exception_info[0], exception_info[1]))
+        return
     if output:
         sc.rtm_send_message(CHANNEL, "```{}```".format(output))
     else:
